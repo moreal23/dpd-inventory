@@ -15,9 +15,12 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Snackbar,
   Stack,
   ThemeProvider,
+  Tooltip,
   Toolbar,
   TextField,
   Typography,
@@ -36,10 +39,15 @@ import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import KeyboardDoubleArrowLeftRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowLeftRounded";
+import KeyboardDoubleArrowRightRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowRightRounded";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import ManageAccountsRoundedIcon from "@mui/icons-material/ManageAccountsRounded";
 import { alpha } from "@mui/material/styles";
 import { Navigate, useLocation, useNavigate, Routes, Route } from "react-router-dom";
 import * as XLSX from "xlsx";
-import theme from "./theme.js";
+import { createAppTheme } from "./theme.js";
 import { ModalRoot } from "./dialogs.jsx";
 import {
   AlertsPage,
@@ -56,6 +64,7 @@ import {
 import { TONER_COLORS } from "./constants.js";
 
 const drawerWidth = 286;
+const collapsedDrawerWidth = 88;
 const ROUTES = [
   { path: "/dashboard", label: "Dashboard", icon: <DashboardRoundedIcon /> },
   { path: "/inventory", label: "Inventory", icon: <DevicesRoundedIcon /> },
@@ -123,22 +132,45 @@ function buildLabelMarkup(device, tonerCounts) {
 }
 
 export default function AppShell() {
+  const [colorMode, setColorMode] = useState(() => {
+    try {
+      return window.localStorage.getItem("dpd-color-mode") || "dark";
+    } catch {
+      return "dark";
+    }
+  });
+  const muiTheme = useMemo(() => createAppTheme(colorMode), [colorMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("dpd-color-mode", colorMode);
+    } catch {
+      // Ignore storage failures and keep the in-memory theme choice.
+    }
+  }, [colorMode]);
+
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={muiTheme}>
       <CssBaseline />
-      <InventoryWorkspace />
+      <InventoryWorkspace
+        colorMode={colorMode}
+        muiTheme={muiTheme}
+        onToggleColorMode={() => setColorMode((current) => (current === "dark" ? "light" : "dark"))}
+      />
     </ThemeProvider>
   );
 }
 
-function InventoryWorkspace() {
+function InventoryWorkspace({ colorMode, muiTheme, onToggleColorMode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const path = location.pathname === "/" ? "/dashboard" : location.pathname;
   const fileInputRef = useRef(null);
-  const themeMode = theme;
+  const themeMode = muiTheme;
   const mobile = useMediaQuery(themeMode.breakpoints.down("lg"));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false);
+  const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
   const [runtimeStatus, setRuntimeStatus] = useState("Checking worker health");
   const [bootstrapRequired, setBootstrapRequired] = useState(false);
   const [session, setSession] = useState(null);
@@ -566,72 +598,187 @@ function InventoryWorkspace() {
   const navItems = ROUTES.filter((item) => !item.admin || session?.role === "admin");
   const currentMeta = ROUTES.find((item) => item.path === path) || ROUTES[0];
   const alertCount = dashboard.stats?.alerts?.length || 0;
-  const drawer = (
+  const desktopDrawerSize = desktopNavCollapsed ? collapsedDrawerWidth : drawerWidth;
+  const profileMenuOpen = Boolean(profileMenuAnchor);
+
+  function openProfileMenu(event) {
+    setProfileMenuAnchor(event.currentTarget);
+  }
+
+  function closeProfileMenu() {
+    setProfileMenuAnchor(null);
+  }
+
+  function openSettingsFromMenu() {
+    closeProfileMenu();
+    navigate("/settings");
+    setMobileOpen(false);
+  }
+
+  async function handleLogoutFromMenu() {
+    closeProfileMenu();
+    await handleLogout();
+  }
+
+  function renderNavButton(item, collapsed = false) {
+    const button = (
+      <ListItemButton
+        key={item.path}
+        selected={path === item.path}
+        onClick={() => {
+          navigate(item.path);
+          setMobileOpen(false);
+        }}
+        sx={{
+          borderRadius: 3,
+          mb: 0.5,
+          minHeight: 52,
+          justifyContent: collapsed ? "center" : "flex-start",
+          px: collapsed ? 1.25 : 1.75,
+        }}
+      >
+        <ListItemIcon
+          sx={{
+            minWidth: collapsed ? 0 : 42,
+            mr: collapsed ? 0 : 0.5,
+            justifyContent: "center",
+          }}
+        >
+          {item.path === "/alerts" ? (
+            <Badge color="warning" badgeContent={alertCount}>{item.icon}</Badge>
+          ) : item.icon}
+        </ListItemIcon>
+        {!collapsed ? <ListItemText primary={item.label} /> : null}
+      </ListItemButton>
+    );
+
+    return collapsed ? (
+      <Tooltip key={item.path} title={item.label} placement="right">
+        {button}
+      </Tooltip>
+    ) : button;
+  }
+
+  function renderDrawer(collapsed = false) {
+    return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Box sx={{ p: 2.5 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Avatar sx={{ bgcolor: alpha("#4ea1ff", 0.18), color: "primary.main" }}>D</Avatar>
-          <Box>
-            <Typography variant="h6">DPD IT</Typography>
-            <Typography variant="body2" color="text.secondary">Cloudflare Inventory</Typography>
-          </Box>
-        </Stack>
+      <Box sx={{ p: collapsed ? 1.25 : 2.5 }}>
+        {collapsed ? (
+          <Stack spacing={1.25} alignItems="center">
+            <Avatar
+              variant="circular"
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                bgcolor: alpha("#4ea1ff", 0.18),
+                color: "primary.main",
+                flexShrink: 0,
+              }}
+            >
+              D
+            </Avatar>
+            {!mobile ? (
+              <Tooltip title="Expand sidebar" placement="right">
+                <IconButton
+                  onClick={() => setDesktopNavCollapsed(false)}
+                  size="small"
+                  sx={{
+                    color: "text.secondary",
+                    border: `1px solid ${alpha(themeMode.palette.text.primary, 0.12)}`,
+                    borderRadius: "50%",
+                  }}
+                >
+                  <KeyboardDoubleArrowRightRoundedIcon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </Stack>
+        ) : (
+          <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar
+                variant="circular"
+                sx={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: "50%",
+                  bgcolor: alpha("#4ea1ff", 0.18),
+                  color: "primary.main",
+                  flexShrink: 0,
+                }}
+              >
+                D
+              </Avatar>
+              <Box>
+                <Typography variant="h6">DPD IT</Typography>
+                <Typography variant="body2" color="text.secondary">Cloudflare Inventory</Typography>
+              </Box>
+            </Stack>
+            {!mobile ? (
+              <Tooltip title="Collapse sidebar" placement="right">
+                <IconButton onClick={() => setDesktopNavCollapsed(true)} size="small" sx={{ color: "text.secondary", borderRadius: "50%" }}>
+                  <KeyboardDoubleArrowLeftRoundedIcon />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </Stack>
+        )}
       </Box>
       <Divider />
-      <List sx={{ px: 1.5, py: 1 }}>
-        {navItems.map((item) => (
-          <ListItemButton
-            key={item.path}
-            selected={path === item.path}
-            onClick={() => {
-              navigate(item.path);
-              setMobileOpen(false);
-            }}
-            sx={{ borderRadius: 3, mb: 0.5 }}
-          >
-            <ListItemIcon sx={{ minWidth: 42 }}>
-              {item.path === "/alerts" ? (
-                <Badge color="warning" badgeContent={alertCount}>{item.icon}</Badge>
-              ) : item.icon}
-            </ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
+      <List sx={{ px: collapsed ? 1 : 1.5, py: 1 }}>
+        {navItems.map((item) => renderNavButton(item, collapsed))}
       </List>
-      <Box sx={{ mt: "auto", p: 2 }}>
+      <Box sx={{ mt: "auto", p: collapsed ? 1.25 : 2 }}>
         <Stack spacing={1.5}>
           {session ? (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                navigate("/settings");
-                setMobileOpen(false);
-              }}
-              sx={{ justifyContent: "flex-start", borderRadius: 3, p: 1.25 }}
-            >
-              <Stack direction="row" spacing={1.25} alignItems="center">
-                <Avatar src={session.avatar_data || undefined} sx={{ width: 34, height: 34 }}>
-                  {(session.full_name || session.username || "?").slice(0, 1).toUpperCase()}
-                </Avatar>
-                <Box sx={{ textAlign: "left" }}>
-                  <Typography variant="body2">{session.full_name || session.username}</Typography>
-                  <Typography variant="caption" color="text.secondary">{session.role}</Typography>
-                </Box>
-              </Stack>
-            </Button>
-          ) : null}
-          {session ? (
-            <Button startIcon={<LogoutRoundedIcon />} color="error" variant="outlined" onClick={handleLogout}>Sign Out</Button>
+            collapsed ? (
+              <Tooltip title="Account" placement="right">
+                <IconButton
+                  onClick={openProfileMenu}
+                  sx={{ alignSelf: "center", border: `1px solid ${alpha(themeMode.palette.text.primary, 0.12)}`, borderRadius: "50%", p: 0.5, width: 46, height: 46 }}
+                >
+                  <Avatar variant="circular" src={session.avatar_data || undefined} sx={{ width: 34, height: 34, borderRadius: "50%" }}>
+                    {(session.full_name || session.username || "?").slice(0, 1).toUpperCase()}
+                  </Avatar>
+                </IconButton>
+              </Tooltip>
+            ) : (
+              <Button
+                variant="outlined"
+                onClick={openProfileMenu}
+                sx={{ justifyContent: "flex-start", borderRadius: 3, p: 1.25 }}
+              >
+                <Stack direction="row" spacing={1.25} alignItems="center">
+                  <Avatar variant="circular" src={session.avatar_data || undefined} sx={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }}>
+                    {(session.full_name || session.username || "?").slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  <Box sx={{ textAlign: "left" }}>
+                    <Typography variant="body2">{session.full_name || session.username}</Typography>
+                    <Typography variant="caption" color="text.secondary">{session.role}</Typography>
+                  </Box>
+                </Stack>
+              </Button>
+            )
           ) : null}
         </Stack>
       </Box>
     </Box>
   );
+  }
 
   return (
     <>
-      <Box sx={{ display: "flex", minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(78,161,255,.14), transparent 28%), radial-gradient(circle at right top, rgba(255,176,32,.1), transparent 26%), #091018" }}>
-        <AppBar position="fixed" sx={{ width: { lg: `calc(100% - ${drawerWidth}px)` }, ml: { lg: `${drawerWidth}px` } }}>
+      <Box
+        sx={{
+          display: "flex",
+          minHeight: "100vh",
+          background: colorMode === "dark"
+            ? "radial-gradient(circle at top left, rgba(78,161,255,.14), transparent 28%), radial-gradient(circle at right top, rgba(255,176,32,.1), transparent 26%), #091018"
+            : "radial-gradient(circle at top left, rgba(78,161,255,.16), transparent 30%), radial-gradient(circle at right top, rgba(255,176,32,.14), transparent 24%), linear-gradient(180deg, #f7fbff 0%, #eaf2fb 100%)",
+        }}
+      >
+        <AppBar position="fixed" sx={{ width: { lg: `calc(100% - ${desktopDrawerSize}px)` }, ml: { lg: `${desktopDrawerSize}px` } }}>
           <Toolbar sx={{ minHeight: 74 }}>
             {mobile ? (
               <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1.5 }}>
@@ -643,10 +790,15 @@ function InventoryWorkspace() {
               <Typography variant="h5">{currentMeta.label}</Typography>
             </Box>
             <Stack direction="row" spacing={1.5} alignItems="center">
+              <Tooltip title={colorMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+                <IconButton onClick={onToggleColorMode} color="inherit">
+                  {colorMode === "dark" ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
+                </IconButton>
+              </Tooltip>
               {session ? (
                 <>
                   <Button
-                    onClick={() => navigate("/settings")}
+                    onClick={openProfileMenu}
                     sx={{
                       color: "inherit",
                       borderRadius: 999,
@@ -657,7 +809,7 @@ function InventoryWorkspace() {
                     }}
                   >
                     <Stack direction="row" spacing={1.25} alignItems="center">
-                      <Avatar src={session.avatar_data || undefined} sx={{ width: 40, height: 40 }}>
+                      <Avatar variant="circular" src={session.avatar_data || undefined} sx={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0 }}>
                         {(session.full_name || session.username || "?").slice(0, 1).toUpperCase()}
                       </Avatar>
                       <Box sx={{ textAlign: "left", display: { xs: "none", sm: "block" } }}>
@@ -668,25 +820,22 @@ function InventoryWorkspace() {
                       </Box>
                     </Stack>
                   </Button>
-                  <IconButton color="error" onClick={handleLogout}>
-                    <LogoutRoundedIcon />
-                  </IconButton>
                 </>
               ) : null}
             </Stack>
           </Toolbar>
         </AppBar>
 
-        <Box component="nav" sx={{ width: { lg: drawerWidth }, flexShrink: { lg: 0 } }}>
+        <Box component="nav" sx={{ width: { lg: desktopDrawerSize }, flexShrink: { lg: 0 } }}>
           <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} variant="temporary" ModalProps={{ keepMounted: true }} sx={{ display: { xs: "block", lg: "none" }, "& .MuiDrawer-paper": { width: drawerWidth } }}>
-            {drawer}
+            {renderDrawer(false)}
           </Drawer>
-          <Drawer open variant="permanent" sx={{ display: { xs: "none", lg: "block" }, "& .MuiDrawer-paper": { width: drawerWidth } }}>
-            {drawer}
+          <Drawer open variant="permanent" sx={{ display: { xs: "none", lg: "block" }, "& .MuiDrawer-paper": { width: desktopDrawerSize, overflowX: "hidden", transition: themeMode.transitions.create("width", { duration: themeMode.transitions.duration.shorter }) } }}>
+            {renderDrawer(desktopNavCollapsed)}
           </Drawer>
         </Box>
 
-        <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 }, pt: { xs: 11, md: 12 }, width: { lg: `calc(100% - ${drawerWidth}px)` } }}>
+        <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 }, pt: { xs: 11, md: 12 }, width: { lg: `calc(100% - ${desktopDrawerSize}px)` } }}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage dashboard={dashboard} tonerCounts={tonerCounts} onOpenHistory={() => navigate("/history")} onQuickNav={navigate} onStatClick={handleStatCard} />} />
@@ -722,6 +871,53 @@ function InventoryWorkspace() {
           }
         }}
       />
+
+      <Menu
+        anchorEl={profileMenuAnchor}
+        open={profileMenuOpen}
+        onClose={closeProfileMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            minWidth: 240,
+            borderRadius: 3,
+            overflow: "hidden",
+          },
+        }}
+      >
+        {session ? (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <Avatar variant="circular" src={session.avatar_data || undefined} sx={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0 }}>
+                {(session.full_name || session.username || "?").slice(0, 1).toUpperCase()}
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {session.full_name || session.username}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {session.full_name ? `${session.username} • ${session.role}` : session.role}
+                </Typography>
+              </Box>
+            </Stack>
+          </Box>
+        ) : null}
+        <Divider />
+        <MenuItem onClick={openSettingsFromMenu}>
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <ManageAccountsRoundedIcon fontSize="small" />
+          </ListItemIcon>
+          Settings
+        </MenuItem>
+        <MenuItem onClick={handleLogoutFromMenu} sx={{ color: "error.main" }}>
+          <ListItemIcon sx={{ minWidth: 36, color: "error.main" }}>
+            <LogoutRoundedIcon fontSize="small" />
+          </ListItemIcon>
+          Sign Out
+        </MenuItem>
+      </Menu>
 
       {!session ? (
         <AuthOverlay
@@ -766,7 +962,9 @@ function AuthOverlay({ authBusy, authForm, authMessage, bootstrapRequired, onCha
         placeItems: "center",
         p: 2,
         zIndex: 1300,
-        background: "radial-gradient(circle at top left, rgba(78,161,255,.2), transparent 30%), rgba(0,0,0,.74)",
+        background: (theme) => theme.palette.mode === "dark"
+          ? "radial-gradient(circle at top left, rgba(78,161,255,.2), transparent 30%), rgba(0,0,0,.74)"
+          : "radial-gradient(circle at top left, rgba(78,161,255,.16), transparent 30%), rgba(238,244,251,.92)",
         backdropFilter: "blur(12px)",
       }}
     >
@@ -774,11 +972,11 @@ function AuthOverlay({ authBusy, authForm, authMessage, bootstrapRequired, onCha
         component="form"
         onSubmit={onSubmit}
         sx={{
-          width: "min(480px, 100%)",
-          p: 4,
-          borderRadius: 6,
+          width: "min(440px, 100%)",
+          p: { xs: 3, sm: 4 },
+          borderRadius: 3,
           bgcolor: "background.paper",
-          border: `1px solid ${alpha("#ffffff", 0.08)}`,
+          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? alpha("#ffffff", 0.08) : alpha("#0f1722", 0.08)}`,
           boxShadow: 24,
         }}
       >
