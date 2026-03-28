@@ -1,0 +1,22 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "dpd-it-inventory-native",
+	"main": "src/index.js",
+	"compatibility_date": "2026-03-28",
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "dpd-it-inventory",
+			"database_id": "4c2f8009-fef8-4768-a4e4-eeb1458fd5f6",
+			"preview_database_id": "dpd-it-inventory-local",
+			"migrations_dir": "./migrations"
+		}
+	]
+}

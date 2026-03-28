@@ -1,0 +1,28 @@
+{
+  "name": "dpd-it-inventory-cloudflare-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-frontend.mjs",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "db:apply": "wrangler d1 migrations apply DB",
+    "db:apply:remote": "wrangler d1 migrations apply DB --remote",
+    "db:seed": "python tools/seed_demo_data.py"
+  },
+  "devDependencies": {
+    "wrangler": "^4.12.0"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.9",
+    "@mui/material": "^7.3.9",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5"
+  }
+}
