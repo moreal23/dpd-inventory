@@ -9,7 +9,7 @@ SOURCE_DB = Path(r"c:\Users\monel\OneDrive\Desktop\DA\inventory_v2.db")
 TARGET_ROOT = Path(__file__).resolve().parent
 TARGET_D1_PATTERN = TARGET_ROOT / ".wrangler" / "state" / "v3" / "d1"
 
-ITERATIONS = 200_000
+ITERATIONS = 100_000
 KEY_LEN = 32
 
 

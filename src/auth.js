@@ -1,9 +1,11 @@
 import { encoder, SESSION_COOKIE, SESSION_TTL_SECONDS } from "./config.js";
 import { fromBase64Url, json, readCookie, timingSafeEqual, toBase64Url } from "./utils.js";
 
+const PBKDF2_ITERATIONS = 100000;
+
 export async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iterations = 200000;
+  const iterations = PBKDF2_ITERATIONS;
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     {
@@ -27,6 +29,9 @@ export async function verifyPassword(password, storedValue) {
   const [iterationsText, saltText, hashText] = String(storedValue).split(":");
   const iterations = Number.parseInt(iterationsText, 10);
   if (!iterations || !saltText || !hashText) {
+    return false;
+  }
+  if (iterations > PBKDF2_ITERATIONS) {
     return false;
   }
 
